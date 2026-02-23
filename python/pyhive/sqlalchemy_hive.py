@@ -378,7 +378,8 @@ class HiveDialect(default.DefaultDialect):
     def get_table_names(self, connection, schema=None, **kw):
         query = 'SHOW TABLES'
         if schema:
-            query += ' IN ' + self.identifier_preparer.quote_identifier(schema)
+            schema_quoted = '.'.join(self.identifier_preparer.quote_identifier(s) for s in schema.split('.'))
+            query += ' IN ' + schema_quoted
 
         table_names = []
 
