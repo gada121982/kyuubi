@@ -153,6 +153,7 @@ class Connection(object):
         scheme=None,
         username=None,
         database='default',
+        catalog=None,
         auth=None,
         configuration=None,
         kerberos_service_name=None,
@@ -281,7 +282,10 @@ class Connection(object):
             assert response.serverProtocolVersion == protocol_version, \
                 "Unable to handle protocol version {}".format(response.serverProtocolVersion)
             with contextlib.closing(self.cursor()) as cursor:
-                cursor.execute('USE `{}`'.format(database))
+                if catalog:
+                    cursor.execute('USE `{}`.`{}`'.format(catalog, database))
+                else:
+                    cursor.execute('USE `{}`'.format(database))
         except:
             self._transport.close()
             raise

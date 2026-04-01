@@ -197,6 +197,10 @@ object AuthenticationFilter {
   final val HTTP_FORWARDED_ADDRESSES = new ThreadLocal[List[String]] {
     override protected def initialValue: List[String] = List.empty
   }
+  // Catalog extracted from HTTP path: /cliservice/<catalog> -> catalog name
+  final val HTTP_CATALOG_FROM_PATH = new ThreadLocal[String]() {
+    override protected def initialValue: String = null
+  }
 
   def getUserIpAddress: String = HTTP_CLIENT_IP_ADDRESS.get
 
@@ -209,4 +213,6 @@ object AuthenticationFilter {
   def getProxyUserName: String = HTTP_CLIENT_PROXY_USER_NAME.get
 
   def getAuthType: String = HTTP_AUTH_TYPE.get()
+
+  def getCatalogFromPath: String = HTTP_CATALOG_FROM_PATH.get
 }

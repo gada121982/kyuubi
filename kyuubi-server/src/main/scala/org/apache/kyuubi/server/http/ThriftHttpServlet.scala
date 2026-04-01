@@ -122,6 +122,9 @@ class ThriftHttpServlet(
       // find proxy user if any from query param
       AuthenticationFilter.HTTP_CLIENT_PROXY_USER_NAME.set(
         getDoAsQueryParam(request.getQueryString))
+      // Extract catalog from HTTP path: /cliservice/<catalog> -> catalog
+      AuthenticationFilter.HTTP_CATALOG_FROM_PATH.set(
+        extractCatalogFromPath(request.getPathInfo))
 
       // Generate new cookie and add it to the response
       if (requireNewCookie && !authFactory.saslDisabled) {
@@ -152,6 +155,7 @@ class ThriftHttpServlet(
       AuthenticationFilter.HTTP_AUTH_TYPE.remove()
       AuthenticationFilter.HTTP_CLIENT_PROXY_USER_NAME.remove()
       AuthenticationFilter.HTTP_FORWARDED_ADDRESSES.remove()
+      AuthenticationFilter.HTTP_CATALOG_FROM_PATH.remove()
     }
   }
 
@@ -293,6 +297,22 @@ class ThriftHttpServlet(
     })
 
     null
+  }
+
+  /**
+   * Extract catalog name from HTTP path info.
+   * Convention: /cliservice/&lt;catalog&gt; -> catalog name.
+   * Path info is the portion after the servlet path (cliservice),
+   * e.g. pathInfo="/sample8" when full path is /cliservice/sample8.
+   * Returns null if no catalog segment is present.
+   */
+  private def extractCatalogFromPath(pathInfo: String): String = {
+    if (pathInfo == null || pathInfo.length <= 1) return null
+    // pathInfo starts with "/", strip it and take the first segment
+    val stripped = pathInfo.stripPrefix("/")
+    if (stripped.isEmpty) return null
+    val catalog = stripped.split("/")(0).trim
+    if (catalog.isEmpty) null else catalog
   }
 
   private def doXsrfFilter(

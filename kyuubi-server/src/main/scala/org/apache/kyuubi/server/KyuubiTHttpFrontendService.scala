@@ -236,6 +236,15 @@ final class KyuubiTHttpFrontendService(
   override def OpenSession(req: TOpenSessionReq): TOpenSessionResp = {
     debug(req.toString)
     info("Client protocol version: " + req.getClient_protocol)
+    // Inject catalog from HTTP path (e.g., /cliservice/sample8 -> use:catalog=sample8)
+    val catalogFromPath = AuthenticationFilter.getCatalogFromPath
+    if (catalogFromPath != null) {
+      if (req.getConfiguration == null) {
+        req.setConfiguration(new java.util.HashMap[String, String]())
+      }
+      req.getConfiguration.put("use:catalog", catalogFromPath)
+      info(s"[CatalogHttpPath] Injected use:catalog='$catalogFromPath' from HTTP path")
+    }
     val resp = new TOpenSessionResp
     try {
       val sessionHandle = getSessionHandle(req, resp)
@@ -295,12 +304,11 @@ final class KyuubiTHttpFrontendService(
 
   private def getHttpPath(httpPath: String): String = {
     if (httpPath == null || httpPath == "") return "/*"
-    else {
-      if (!httpPath.startsWith("/")) return "/" + httpPath
-      if (httpPath.endsWith("/")) return httpPath + "*"
-      if (!httpPath.endsWith("/*")) return httpPath + "/*"
-    }
-    httpPath
+    var path = httpPath
+    if (!path.startsWith("/")) path = "/" + path
+    if (path.endsWith("/")) return path + "*"
+    if (!path.endsWith("/*")) return path + "/*"
+    path
   }
 
   def constrainHttpMethods(ctxHandler: ServletContextHandler): Unit = {
