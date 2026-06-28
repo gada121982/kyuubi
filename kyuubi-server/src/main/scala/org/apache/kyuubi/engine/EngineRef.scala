@@ -277,13 +277,43 @@ private[kyuubi] class EngineRef(
         }
 
         if (started + timeout <= System.currentTimeMillis()) {
+          // Diagnose WHY the engine didn't come up in time by inspecting the
+          // driver pod state (queried BEFORE killApplication removes the pod),
+          // so the client gets an actionable reason instead of a blind timeout.
+          val diagnostic =
+            try {
+              Option(engineManager)
+                .flatMap(_.getApplicationInfo(
+                  builder.appMgrInfo(),
+                  engineRefId,
+                  Some(appUser),
+                  Some(started)))
+                .map { appInfo =>
+                  // appInfo.error carries the pod status (conditions / container
+                  // waiting reasons). Match on it as a string so this works
+                  // whether the field is an Option or a plain String.
+                  val raw = String.valueOf(appInfo.error)
+                  val reason =
+                    if (raw.contains("Unschedulable") || raw.contains("Insufficient")) {
+                      "compute cluster is scaling up a node (autoscaling); please retry in a few minutes"
+                    } else if (raw.contains("ImagePull") || raw.contains("InvalidImageName")) {
+                      "engine image pull failed; please contact an administrator"
+                    } else {
+                      "engine is still starting; please retry shortly"
+                    }
+                  s"$reason (state=${appInfo.state})"
+                }
+                .getOrElse("engine pod status unavailable (engine not yet created on K8s)")
+            } catch {
+              case e: Throwable => s"(failed to diagnose pod status: ${e.getMessage})"
+            }
           val killMessage =
             engineManager.killApplication(builder.appMgrInfo(), engineRefId, Some(appUser))
           builder.close(true)
           MetricsSystem.tracing(_.incCount(MetricRegistry.name(ENGINE_TIMEOUT, appUser)))
           throw KyuubiSQLException(
             s"Timeout($timeout ms, you can modify ${ENGINE_INIT_TIMEOUT.key} to change it) to" +
-              s" launched $engineType engine with $redactedCmd. $killMessage",
+              s" launch $engineType engine. Diagnosis: $diagnostic. $killMessage",
             builder.getError)
         }
         engineRef = discoveryClient.getEngineByRefId(engineSpace, engineRefId)
