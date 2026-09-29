@@ -76,6 +76,13 @@ class SparkSessionImpl(
       Array(USE_CATALOG, USE_DATABASE).contains(k)
     }
 
+    // Apply the session's configuration before anything touches a catalog: switching the current
+    // catalog loads it, and a catalog loaded with the engine's launch-time settings (e.g. a
+    // credential of another session) would keep them for this session.
+    otherConf.foreach {
+      case (key, value) => setModifiableConfig(key, value)
+    }
+
     useCatalogAndDatabaseConf.get(USE_CATALOG).foreach { catalog =>
       try {
         SparkCatalogUtils.setCurrentCatalog(spark, catalog)
@@ -99,9 +106,6 @@ class SparkSessionImpl(
       }
     }
 
-    otherConf.foreach {
-      case (key, value) => setModifiableConfig(key, value)
-    }
     KDFRegistry.registerAll(spark)
     EventBus.post(sessionEvent)
     super.open()

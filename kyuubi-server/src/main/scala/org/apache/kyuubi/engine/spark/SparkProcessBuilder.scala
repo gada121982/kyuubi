@@ -139,7 +139,10 @@ class SparkProcessBuilder(
     buffer += CLASS
     buffer += mainClass
 
-    var allConf = conf.getAll
+    // Keys that must only travel per session (e.g. a user's credential) are kept out of the
+    // launch command; the engine still receives them in every session's configuration.
+    val launchExcluded = conf.get(ENGINE_LAUNCH_CONF_EXCLUDE_LIST)
+    var allConf = conf.getAll.filterNot { case (k, _) => launchExcluded.contains(k) }
 
     // if enable sasl kerberos authentication for zookeeper, need to upload the server keytab file
     if (AuthTypes.withName(conf.get(HA_ZK_ENGINE_AUTH_TYPE)) == AuthTypes.KERBEROS) {

@@ -59,6 +59,25 @@ class SparkProcessBuilderSuite extends KerberizedTestHelper with MockitoSugar {
     process.destroyForcibly()
   }
 
+  test("launch conf exclude list keeps keys out of the engine launch command") {
+    val credentialKey = "spark.sql.gravitino.oauth2.credential"
+    val withCredential = conf.clone
+      .set(credentialKey, "per-session-secret")
+      .set("spark.executor.memory", "2g")
+
+    val kept = new SparkProcessBuilder("kentyao", true, withCredential).toString
+    assert(kept.contains(s"$credentialKey=per-session-secret"))
+
+    val excluded = new SparkProcessBuilder(
+      "kentyao",
+      true,
+      withCredential.clone.set(ENGINE_LAUNCH_CONF_EXCLUDE_LIST.key, s"$credentialKey,unused.key"))
+      .toString
+    assert(!excluded.contains(s"$credentialKey="))
+    assert(!excluded.contains("per-session-secret"))
+    assert(excluded.contains("spark.executor.memory=2g"))
+  }
+
   test("capture error from spark process builder") {
     val processBuilder = new SparkProcessBuilder("kentyao", true, conf.set("spark.ui.port", "abc"))
     processBuilder.start

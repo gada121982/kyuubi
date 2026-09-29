@@ -2598,6 +2598,19 @@ object KyuubiConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ENGINE_LAUNCH_CONF_EXCLUDE_LIST: ConfigEntry[Set[String]] =
+    buildConf("kyuubi.engine.launch.conf.exclude.list")
+      .doc("A comma-separated list of session config keys that are never put into the engine" +
+        " launch command. They still reach the engine through each session's configuration." +
+        " Use it for per-session credentials: a value in the launch command becomes the engine's" +
+        " global configuration (shared by every later session of that engine) and is written to" +
+        " the driver's configuration files.")
+      .version("1.11.1")
+      .serverOnly
+      .stringConf
+      .toSet()
+      .createWithDefault(Set.empty)
+
   val ENGINE_USER_ISOLATED_SPARK_SESSION: ConfigEntry[Boolean] =
     buildConf("kyuubi.engine.user.isolated.spark.session")
       .doc("When set to false, if the engine is running in a group or server share level, " +

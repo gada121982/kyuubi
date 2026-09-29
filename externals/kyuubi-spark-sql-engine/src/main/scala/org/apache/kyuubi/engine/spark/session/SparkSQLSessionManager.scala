@@ -21,7 +21,7 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.api.python.KyuubiPythonGatewayServer
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 
 import org.apache.kyuubi.KyuubiSQLException
 import org.apache.kyuubi.config.KyuubiConf
@@ -136,6 +136,18 @@ class SparkSQLSessionManager private (name: String, spark: SparkSession)
       rootSparkSession: SparkSession,
       sessionConf: Map[String, String]): SparkSession = {
     val newSparkSession = rootSparkSession.newSession()
+    // Apply the session's own configuration before the initialization SQL runs: that SQL may load
+    // catalogs, which must see this session's settings (e.g. its credential), not the engine's
+    // launch-time ones. SparkSessionImpl.open() applies the same settings again; it is idempotent.
+    validateAndNormalizeConf(sessionConf).foreach {
+      case (USE_CATALOG | USE_DATABASE, _) =>
+      case (key, value) =>
+        try {
+          newSparkSession.conf.set(key, value)
+        } catch {
+          case e: AnalysisException => warn(e.getMessage())
+        }
+    }
     KyuubiSparkUtil.initializeSparkSession(
       newSparkSession,
       sessionConf.get(ENGINE_SESSION_SPARK_INITIALIZE_SQL.key)
