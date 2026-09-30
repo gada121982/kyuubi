@@ -68,11 +68,11 @@ class SparkProcessBuilderSuite extends KerberizedTestHelper with MockitoSugar {
     val kept = new SparkProcessBuilder("kentyao", true, withCredential).toString
     assert(kept.contains(s"$credentialKey=per-session-secret"))
 
-    val excluded = new SparkProcessBuilder(
-      "kentyao",
-      true,
-      withCredential.clone.set(ENGINE_LAUNCH_CONF_EXCLUDE_LIST.key, s"$credentialKey,unused.key"))
-      .toString
+    // Built like KyuubiSessionManager does: server defaults for the user, then the session conf.
+    val sessionConf = withCredential.clone
+      .set(ENGINE_LAUNCH_CONF_EXCLUDE_LIST.key, s"$credentialKey,unused.key")
+      .getUserDefaults("kentyao")
+    val excluded = new SparkProcessBuilder("kentyao", true, sessionConf).toString
     assert(!excluded.contains(s"$credentialKey="))
     assert(!excluded.contains("per-session-secret"))
     assert(excluded.contains("spark.executor.memory=2g"))

@@ -26,7 +26,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.kyuubi.KyuubiSQLException
 import org.apache.kyuubi.config.KyuubiConf
 import org.apache.kyuubi.config.KyuubiConf._
-import org.apache.kyuubi.config.KyuubiReservedKeys.KYUUBI_SESSION_HANDLE_KEY
+import org.apache.kyuubi.config.KyuubiReservedKeys.{KYUUBI_SESSION_HANDLE_KEY, KYUUBI_SESSION_USER_KEY}
 import org.apache.kyuubi.engine.ShareLevel
 import org.apache.kyuubi.engine.ShareLevel._
 import org.apache.kyuubi.engine.spark.{KyuubiSparkUtil, SparkSQLEngine}
@@ -113,8 +113,8 @@ class SparkSQLSessionManager private (name: String, spark: SparkSession)
         // it's unnecessary to create a new spark session in connection share level
         // since the session is only one
         case CONNECTION => spark
-        case USER => newSparkSession(spark, sessionConf)
-        case GROUP | SERVER if userIsolatedSparkSession => newSparkSession(spark, sessionConf)
+        case USER => newSparkSession(spark, user, sessionConf)
+        case GROUP | SERVER if userIsolatedSparkSession => newSparkSession(spark, user, sessionConf)
         case GROUP | SERVER =>
           userIsolatedCacheLock.synchronized {
             if (userIsolatedCache.containsKey(user)) {
@@ -123,7 +123,7 @@ class SparkSQLSessionManager private (name: String, spark: SparkSession)
               userIsolatedCache.get(user)
             } else {
               userIsolatedCacheCount.put(user, (1, System.currentTimeMillis()))
-              val newSession = newSparkSession(spark, sessionConf)
+              val newSession = newSparkSession(spark, user, sessionConf)
               userIsolatedCache.put(user, newSession)
               newSession
             }
@@ -134,6 +134,7 @@ class SparkSQLSessionManager private (name: String, spark: SparkSession)
 
   private def newSparkSession(
       rootSparkSession: SparkSession,
+      user: String,
       sessionConf: Map[String, String]): SparkSession = {
     val newSparkSession = rootSparkSession.newSession()
     // Apply the session's own configuration before the initialization SQL runs: that SQL may load
@@ -148,12 +149,22 @@ class SparkSQLSessionManager private (name: String, spark: SparkSession)
           case e: AnalysisException => warn(e.getMessage())
         }
     }
-    KyuubiSparkUtil.initializeSparkSession(
-      newSparkSession,
-      sessionConf.get(ENGINE_SESSION_SPARK_INITIALIZE_SQL.key)
-        .filter(_.nonEmpty)
-        .map(_.split(";").toSeq)
-        .getOrElse(conf.get(ENGINE_SESSION_SPARK_INITIALIZE_SQL)))
+    // Like an operation (SparkOperation.withLocalProperties), the initialization SQL runs as the
+    // session user: extensions that load catalogs for it may need the user, e.g. when the
+    // session's credential is an opaque token that does not name its owner.
+    val sc = newSparkSession.sparkContext
+    val previousUser = sc.getLocalProperty(KYUUBI_SESSION_USER_KEY)
+    sc.setLocalProperty(KYUUBI_SESSION_USER_KEY, user)
+    try {
+      KyuubiSparkUtil.initializeSparkSession(
+        newSparkSession,
+        sessionConf.get(ENGINE_SESSION_SPARK_INITIALIZE_SQL.key)
+          .filter(_.nonEmpty)
+          .map(_.split(";").toSeq)
+          .getOrElse(conf.get(ENGINE_SESSION_SPARK_INITIALIZE_SQL)))
+    } finally {
+      sc.setLocalProperty(KYUUBI_SESSION_USER_KEY, previousUser)
+    }
     newSparkSession
   }
 

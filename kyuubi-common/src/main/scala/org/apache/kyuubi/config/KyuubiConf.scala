@@ -2604,9 +2604,9 @@ object KyuubiConf {
         " launch command. They still reach the engine through each session's configuration." +
         " Use it for per-session credentials: a value in the launch command becomes the engine's" +
         " global configuration (shared by every later session of that engine) and is written to" +
-        " the driver's configuration files.")
+        " the driver's configuration files. Not server-only: the engine process builder reads" +
+        " it from the session configuration.")
       .version("1.11.1")
-      .serverOnly
       .stringConf
       .toSet()
       .createWithDefault(Set.empty)
